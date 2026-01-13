@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排程郵件管理 - Check-In CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen">
+    <header class="bg-slate-800 border-b border-slate-700 py-4 px-6">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-bold text-white">
+                <span class="text-indigo-400">Check-In CRM</span>
+                <span class="text-slate-400 text-sm ml-2">排程郵件管理</span>
+            </h1>
+            <div class="flex gap-4">
+                <a href="/" class="text-slate-400 hover:text-white transition-colors">打卡頁面</a>
+                <a href="/dashboard" class="text-slate-400 hover:text-white transition-colors">Dashboard</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-6">
+        <!-- Create New Scheduled Email -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-6">
+            <h2 class="text-lg font-semibold text-white mb-4">建立排程郵件</h2>
+
+            <form id="create-form" class="space-y-4">
+                <!-- Template Selection -->
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">選擇範本</label>
+                    <select id="template-select" onchange="loadSelectedTemplate()"
+                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none">
+                        <option value="">-- 選擇預設範本 --</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">任務名稱</label>
+                        <input type="text" id="name" required
+                            class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none"
+                            placeholder="例：2026春季招生通知">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">預定發送時間</label>
+                        <input type="datetime-local" id="scheduled_at" required
+                            class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">郵件主旨</label>
+                    <input type="text" id="subject" required
+                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none"
+                        placeholder="例：【招生通知】華語文教學系招生申請開放">
+                </div>
+
+                <!-- Target Tags Selection -->
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">發送對象（選擇標籤）</label>
+                    <select id="target_tag_select"
+                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none">
+                        <option value="">全部用戶</option>
+                    </select>
+                    <p class="text-slate-500 text-xs mt-1">選擇要發送的目標群組</p>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">郵件內容 (HTML)</label>
+                    <p class="text-slate-500 text-xs mb-2">使用 <code class="bg-slate-700 px-1 rounded">{{name}}</code> 作為收件人姓名佔位符</p>
+                    <textarea id="html_content" rows="12" required
+                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:border-indigo-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="flex gap-4">
+                    <button type="button" onclick="previewRecipients()"
+                        class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">
+                        預覽收件人
+                    </button>
+                    <button type="submit"
+                        class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors">
+                        建立排程
+                    </button>
+                </div>
+            </form>
+
+            <div id="recipients-preview" class="hidden mt-4 p-4 bg-slate-900 rounded-lg">
+                <h3 class="text-white font-medium mb-2">收件人預覽</h3>
+                <p id="recipients-count" class="text-slate-400 text-sm"></p>
+                <div id="recipients-list" class="mt-2 max-h-40 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <!-- Scheduled Emails List -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-white">排程郵件列表</h2>
+                <button onclick="loadScheduledEmails()"
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
+                    重新載入
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-900">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">名稱</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">主旨</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">對象</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">排程時間</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">狀態</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">結果</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="emails-table" class="divide-y divide-slate-700">
+                        <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">載入中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Email Logs -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden mt-6">
+            <div class="p-4 border-b border-slate-700">
+                <h2 class="text-lg font-semibold text-white">郵件發送紀錄</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-900">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">時間</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">收件人</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">主旨</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">狀態</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table" class="divide-y divide-slate-700">
+                        <tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">載入中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let templates = [];
+        let availableTags = [];
+
+        // Load templates
+        async function loadTemplates() {
+            try {
+                const res = await fetch('/api/scheduler/templates');
+                templates = await res.json();
+
+                const select = document.getElementById('template-select');
+                select.innerHTML = '<option value="">-- 選擇預設範本 --</option>' +
+                    templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            } catch (e) {
+                console.error('Failed to load templates:', e);
+            }
+        }
+
+        // Load selected template
+        async function loadSelectedTemplate() {
+            const templateId = document.getElementById('template-select').value;
+            if (!templateId) return;
+
+            try {
+                const res = await fetch(`/api/scheduler/templates/${templateId}`);
+                const template = await res.json();
+
+                document.getElementById('subject').value = template.subject;
+                document.getElementById('html_content').value = template.html_content;
+            } catch (e) {
+                alert('載入範本失敗');
+            }
+        }
+
+        // Load available tags
+        async function loadTags() {
+            try {
+                const res = await fetch('/api/tags');
+                availableTags = await res.json();
+
+                const select = document.getElementById('target_tag_select');
+                select.innerHTML = '<option value="">全部用戶</option>' +
+                    availableTags.map(tag => `<option value="${tag}">${tag}</option>`).join('');
+            } catch (e) {
+                console.error('Failed to load tags:', e);
+            }
+        }
+
+        // Load scheduled emails
+        async function loadScheduledEmails() {
+            try {
+                const res = await fetch('/api/scheduler/emails');
+                const emails = await res.json();
+
+                const tbody = document.getElementById('emails-table');
+
+                if (emails.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">尚無排程郵件</td></tr>';
+                    return;
+                }
+
+                const statusColors = {
+                    'pending': 'bg-yellow-500/20 text-yellow-400',
+                    'sent': 'bg-emerald-500/20 text-emerald-400',
+                    'failed': 'bg-red-500/20 text-red-400',
+                    'cancelled': 'bg-slate-500/20 text-slate-400'
+                };
+                const statusText = {
+                    'pending': '等待中',
+                    'sent': '已發送',
+                    'failed': '失敗',
+                    'cancelled': '已取消'
+                };
+
+                tbody.innerHTML = emails.map(email => `
+                    <tr class="hover:bg-slate-700/50">
+                        <td class="px-4 py-3 text-white">${email.name}</td>
+                        <td class="px-4 py-3 text-slate-300 max-w-xs truncate">${email.subject}</td>
+                        <td class="px-4 py-3 text-slate-400 text-sm">${email.targetTags?.length ? email.targetTags.join(', ') : '全部'}</td>
+                        <td class="px-4 py-3 text-slate-400 text-sm">${new Date(email.scheduledAt).toLocaleString('zh-TW')}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded text-xs ${statusColors[email.status]}">${statusText[email.status]}</span>
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            ${email.status === 'sent' ? `<span class="text-emerald-400">${email.sentCount}</span>/<span class="text-red-400">${email.failedCount}</span>` : '-'}
+                        </td>
+                        <td class="px-4 py-3">
+                            ${email.status === 'pending' ? `<button onclick="cancelEmail('${email.id}')" class="text-red-400 hover:text-red-300 text-sm">取消</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load emails:', e);
+            }
+        }
+
+        // Load email logs
+        async function loadEmailLogs() {
+            try {
+                const res = await fetch('/api/scheduler/logs?limit=50');
+                const logs = await res.json();
+
+                const tbody = document.getElementById('logs-table');
+
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">尚無發送紀錄</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = logs.map(log => `
+                    <tr class="hover:bg-slate-700/50">
+                        <td class="px-4 py-3 text-slate-400 text-sm">${new Date(log.sentAt).toLocaleString('zh-TW')}</td>
+                        <td class="px-4 py-3 text-white">${log.user?.email || '-'}</td>
+                        <td class="px-4 py-3 text-slate-300 max-w-xs truncate">${log.subject}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 rounded text-xs ${log.status === 'sent' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}">
+                                ${log.status === 'sent' ? '成功' : '失敗'}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load logs:', e);
+            }
+        }
+
+        // Preview recipients
+        async function previewRecipients() {
+            const tag = document.getElementById('target_tag_select').value;
+            try {
+                const res = await fetch(`/api/scheduler/preview-recipients?tags=${encodeURIComponent(tag)}`);
+                const data = await res.json();
+
+                document.getElementById('recipients-preview').classList.remove('hidden');
+                document.getElementById('recipients-count').textContent = `共 ${data.count} 位收件人`;
+                document.getElementById('recipients-list').innerHTML = data.users.map(u =>
+                    `<div class="text-slate-400 text-sm py-1">${u.email} ${u.name ? `(${u.name})` : ''}</div>`
+                ).join('');
+            } catch (e) {
+                alert('預覽失敗');
+            }
+        }
+
+        // Create scheduled email
+        document.getElementById('create-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const tag = document.getElementById('target_tag_select').value;
+
+            const data = {
+                name: document.getElementById('name').value,
+                subject: document.getElementById('subject').value,
+                html_content: document.getElementById('html_content').value,
+                target_tags: tag ? [tag] : [],
+                scheduled_at: new Date(document.getElementById('scheduled_at').value).toISOString()
+            };
+
+            try {
+                const res = await fetch('/api/scheduler/emails', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (res.ok) {
+                    alert('排程建立成功！');
+                    document.getElementById('create-form').reset();
+                    loadScheduledEmails();
+                } else {
+                    const err = await res.json();
+                    alert('建立失敗：' + err.detail);
+                }
+            } catch (e) {
+                alert('建立失敗：' + e.message);
+            }
+        });
+
+        // Cancel scheduled email
+        async function cancelEmail(id) {
+            if (!confirm('確定要取消此排程郵件？')) return;
+
+            try {
+                const res = await fetch(`/api/scheduler/emails/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    alert('已取消');
+                    loadScheduledEmails();
+                } else {
+                    const err = await res.json();
+                    alert('取消失敗：' + err.detail);
+                }
+            } catch (e) {
+                alert('取消失敗：' + e.message);
+            }
+        }
+
+        // Initial load
+        loadTemplates();
+        loadTags();
+        loadScheduledEmails();
+        loadEmailLogs();
+
+        // Auto refresh
+        setInterval(() => {
+            loadScheduledEmails();
+            loadEmailLogs();
+        }, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Check-In CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen">
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 py-4 px-6">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-bold text-white">
+                <span class="text-indigo-400">Check-In CRM</span>
+                <span class="text-slate-400 text-sm ml-2">Dashboard</span>
+            </h1>
+            <div class="flex gap-4">
+                <a href="/scheduler" class="text-slate-400 hover:text-white transition-colors">排程郵件</a>
+                <a href="/" class="text-slate-400 hover:text-white transition-colors">打卡頁面</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-6">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="text-slate-400 text-sm mb-1">總用戶數</div>
+                <div id="total-users" class="text-3xl font-bold text-white">-</div>
+            </div>
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="text-slate-400 text-sm mb-1">總打卡次數</div>
+                <div id="total-checkins" class="text-3xl font-bold text-indigo-400">-</div>
+            </div>
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="text-slate-400 text-sm mb-1">本次活動打卡</div>
+                <div id="event-checkins" class="text-3xl font-bold text-emerald-400">-</div>
+            </div>
+        </div>
+
+        <!-- Export Section -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-6">
+            <h2 class="text-lg font-semibold text-white mb-4">匯出名單 (CSV)</h2>
+            <div class="flex flex-wrap gap-3 items-center">
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-slate-400 text-sm mb-1">選擇活動標籤</label>
+                    <select id="export-tag" class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none">
+                        <option value="">全部用戶</option>
+                    </select>
+                </div>
+                <div class="flex gap-2 pt-5">
+                    <button onclick="exportCSV()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        匯出 CSV
+                    </button>
+                </div>
+            </div>
+            <p id="export-count" class="text-slate-500 text-sm mt-2"></p>
+        </div>
+
+        <!-- Tag Filter for Table -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex flex-wrap items-center justify-between gap-4">
+                <h2 class="text-lg font-semibold text-white">用戶列表</h2>
+                <div class="flex items-center gap-3">
+                    <select id="filter-tag" onchange="filterUsers()" class="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:border-indigo-500 focus:outline-none">
+                        <option value="">全部用戶</option>
+                    </select>
+                    <button onclick="loadData()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
+                        重新載入
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-900">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Email</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">姓名</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">標籤</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">打卡次數</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">建立時間</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table" class="divide-y divide-slate-700">
+                        <tr>
+                            <td colspan="5" class="px-4 py-8 text-center text-slate-500">
+                                載入中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="table-footer" class="p-4 border-t border-slate-700 text-slate-400 text-sm"></div>
+        </div>
+    </main>
+
+    <script>
+        let allUsers = [];
+        let allTags = new Set();
+
+        async function loadData() {
+            // Load stats
+            try {
+                const statsRes = await fetch('/api/stats');
+                const stats = await statsRes.json();
+                document.getElementById('total-users').textContent = stats.total_users;
+                document.getElementById('total-checkins').textContent = stats.total_checkins;
+                document.getElementById('event-checkins').textContent = stats.event_checkins;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+
+            // Load users
+            try {
+                const usersRes = await fetch('/api/users');
+                allUsers = await usersRes.json();
+
+                // Collect all unique tags
+                allTags = new Set();
+                allUsers.forEach(user => {
+                    (user.tags || []).forEach(tag => allTags.add(tag));
+                });
+
+                // Update tag dropdowns
+                updateTagDropdowns();
+
+                // Display users
+                filterUsers();
+            } catch (e) {
+                console.error('Failed to load users:', e);
+                document.getElementById('users-table').innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-4 py-8 text-center text-red-400">
+                            載入失敗，請稍後再試
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function updateTagDropdowns() {
+            const sortedTags = Array.from(allTags).sort();
+            const options = '<option value="">全部用戶</option>' +
+                sortedTags.map(tag => `<option value="${tag}">${tag}</option>`).join('');
+
+            document.getElementById('export-tag').innerHTML = options;
+            document.getElementById('filter-tag').innerHTML = options;
+        }
+
+        function filterUsers() {
+            const filterTag = document.getElementById('filter-tag').value;
+            const tbody = document.getElementById('users-table');
+
+            let filteredUsers = allUsers;
+            if (filterTag) {
+                filteredUsers = allUsers.filter(user =>
+                    (user.tags || []).includes(filterTag)
+                );
+            }
+
+            if (filteredUsers.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-4 py-8 text-center text-slate-500">
+                            尚無打卡紀錄
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('table-footer').textContent = '';
+                return;
+            }
+
+            tbody.innerHTML = filteredUsers.map(user => `
+                <tr class="hover:bg-slate-700/50">
+                    <td class="px-4 py-3 text-white">${user.email}</td>
+                    <td class="px-4 py-3 text-slate-300">${user.name || '-'}</td>
+                    <td class="px-4 py-3">
+                        ${(user.tags || []).map(tag => `
+                            <span class="inline-block px-2 py-1 text-xs bg-indigo-500/20 text-indigo-300 rounded mr-1 mb-1">${tag}</span>
+                        `).join('')}
+                    </td>
+                    <td class="px-4 py-3 text-emerald-400">${user.logs?.length || 0}</td>
+                    <td class="px-4 py-3 text-slate-400 text-sm">${new Date(user.createdAt).toLocaleString('zh-TW')}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('table-footer').textContent =
+                `顯示 ${filteredUsers.length} 筆${filterTag ? ` (篩選: ${filterTag})` : ''}`;
+        }
+
+        function exportCSV() {
+            const tag = document.getElementById('export-tag').value;
+            let url = '/api/export/csv';
+            if (tag) {
+                url += `?tag=${encodeURIComponent(tag)}`;
+            }
+            window.location.href = url;
+        }
+
+        // Update export count when tag selection changes
+        document.getElementById('export-tag').addEventListener('change', function() {
+            const tag = this.value;
+            let count = allUsers.length;
+            if (tag) {
+                count = allUsers.filter(u => (u.tags || []).includes(tag)).length;
+            }
+            document.getElementById('export-count').textContent =
+                `將匯出 ${count} 筆資料${tag ? ` (${tag})` : ''}`;
+        });
+
+        // Initial load
+        loadData();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>

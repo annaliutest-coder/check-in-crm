@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快速打卡 - 華語文教學系</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+        .glow {
+            box-shadow: 0 0 60px rgba(99, 102, 241, 0.3);
+        }
+        .success-glow {
+            box-shadow: 0 0 100px rgba(16, 185, 129, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700 py-4 px-6">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <h1 class="text-2xl font-bold text-white">
+                <span class="text-indigo-400">華語文教學系</span>
+                <span class="text-slate-400 text-lg ml-2">國際與文化組</span>
+            </h1>
+            <div class="text-emerald-400 text-sm flex items-center gap-2">
+                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                <span id="event-name">載入中...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex items-center justify-center p-6">
+        <!-- Check-in Form -->
+        <div id="form-container" class="w-full max-w-lg">
+            <div class="bg-slate-800 rounded-2xl p-8 glow border border-slate-700">
+                <h2 class="text-3xl font-bold text-white text-center mb-2">快速打卡</h2>
+                <p class="text-slate-400 text-center mb-8">留下您的 Email，我們將在報名開始時通知您</p>
+
+                <form id="checkin-form" class="space-y-6">
+                    <!-- Email Input -->
+                    <div>
+                        <label class="block text-slate-300 text-sm font-medium mb-2">
+                            Email <span class="text-red-400">*</span>
+                        </label>
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            required
+                            placeholder="your@email.com"
+                            class="w-full px-4 py-4 bg-slate-900 border border-slate-600 rounded-xl text-white text-lg placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                        >
+                    </div>
+
+                    <!-- Name Input (Optional) -->
+                    <div>
+                        <label class="block text-slate-300 text-sm font-medium mb-2">
+                            姓名 <span class="text-slate-500">(選填)</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="name"
+                            name="name"
+                            placeholder="您的姓名"
+                            class="w-full px-4 py-4 bg-slate-900 border border-slate-600 rounded-xl text-white text-lg placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                        >
+                    </div>
+
+                    <!-- Send Email Checkbox -->
+                    <div class="flex items-center gap-3">
+                        <input
+                            type="checkbox"
+                            id="send_email"
+                            name="send_email"
+                            checked
+                            class="w-5 h-5 rounded bg-slate-900 border-slate-600 text-indigo-500 focus:ring-indigo-500/20"
+                        >
+                        <label for="send_email" class="text-slate-300">
+                            寄送歡迎郵件給我
+                        </label>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button
+                        type="submit"
+                        class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xl font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <span id="btn-text">打卡</span>
+                        <span id="btn-loading" class="hidden">
+                            <svg class="animate-spin h-6 w-6 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+                </form>
+
+                <!-- QR Scan Button -->
+                <div class="mt-6 pt-6 border-t border-slate-700">
+                    <button
+                        id="qr-scan-btn"
+                        class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                        </svg>
+                        模擬 QR Code 掃描
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Screen -->
+        <div id="success-container" class="hidden w-full max-w-lg text-center">
+            <div class="bg-slate-800 rounded-2xl p-12 success-glow border border-emerald-500/30">
+                <div class="w-24 h-24 mx-auto mb-6 bg-emerald-500 rounded-full flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h2 class="text-4xl font-bold text-emerald-400 mb-4">打卡成功！</h2>
+                <p id="success-message" class="text-slate-300 text-lg mb-2"></p>
+                <p class="text-slate-500 text-sm">頁面將在 <span id="countdown">3</span> 秒後自動重置</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- System Log -->
+    <footer class="bg-slate-800/50 border-t border-slate-700 p-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-2 text-slate-500 text-xs mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                系統紀錄
+            </div>
+            <div id="system-log" class="bg-slate-900 rounded-lg p-3 h-24 overflow-y-auto font-mono text-xs text-slate-400">
+                <div class="text-emerald-400">[系統] 就緒，等待打卡...</div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const form = document.getElementById('checkin-form');
+        const formContainer = document.getElementById('form-container');
+        const successContainer = document.getElementById('success-container');
+        const successMessage = document.getElementById('success-message');
+        const btnText = document.getElementById('btn-text');
+        const btnLoading = document.getElementById('btn-loading');
+        const systemLog = document.getElementById('system-log');
+        const qrScanBtn = document.getElementById('qr-scan-btn');
+        const countdownEl = document.getElementById('countdown');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString('zh-TW');
+            const colorClass = type === 'success' ? 'text-emerald-400' :
+                              type === 'error' ? 'text-red-400' :
+                              type === 'info' ? 'text-indigo-400' : 'text-slate-400';
+            const logEntry = document.createElement('div');
+            logEntry.className = colorClass;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            systemLog.appendChild(logEntry);
+            systemLog.scrollTop = systemLog.scrollHeight;
+        }
+
+        function setLoading(loading) {
+            const submitBtn = form.querySelector('button[type="submit"]');
+            submitBtn.disabled = loading;
+            btnText.classList.toggle('hidden', loading);
+            btnLoading.classList.toggle('hidden', !loading);
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            formContainer.classList.add('hidden');
+            successContainer.classList.remove('hidden');
+
+            let countdown = 3;
+            countdownEl.textContent = countdown;
+
+            const timer = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(timer);
+                    resetForm();
+                }
+            }, 1000);
+        }
+
+        function resetForm() {
+            form.reset();
+            document.getElementById('send_email').checked = true;
+            successContainer.classList.add('hidden');
+            formContainer.classList.remove('hidden');
+            log('表單已重置，等待下一位用戶...');
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setLoading(true);
+
+            const email = document.getElementById('email').value;
+            const name = document.getElementById('name').value;
+            const sendEmail = document.getElementById('send_email').checked;
+
+            log(`正在處理打卡: ${email}...`);
+
+            try {
+                const response = await fetch('/api/check-in', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        name: name || null,
+                        send_email: sendEmail
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    log(`打卡成功: ${email}`, 'success');
+                    if (data.email_sent) {
+                        log(`歡迎郵件已排程發送至 ${email}`, 'success');
+                    }
+                    showSuccess(data.message);
+                } else {
+                    throw new Error(data.message || '打卡失敗');
+                }
+            } catch (error) {
+                log(`錯誤: ${error.message}`, 'error');
+                alert('打卡失敗，請稍後再試。');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // Simulate QR code scan
+        qrScanBtn.addEventListener('click', () => {
+            log('模擬掃描 QR Code...', 'info');
+
+            // Simulate finding a user
+            setTimeout(() => {
+                const simulatedEmail = 'demo@example.com';
+                const simulatedName = '測試用戶';
+
+                document.getElementById('email').value = simulatedEmail;
+                document.getElementById('name').value = simulatedName;
+
+                log(`QR Code 掃描成功，已填入: ${simulatedEmail}`, 'success');
+            }, 500);
+        });
+
+        // Auto-focus email input
+        document.getElementById('email').focus();
+
+        // Load event name from API
+        async function loadEventName() {
+            try {
+                const res = await fetch('/api/event');
+                const data = await res.json();
+                document.getElementById('event-name').textContent = data.event_name;
+            } catch (e) {
+                console.error('Failed to load event name:', e);
+            }
+        }
+        loadEventName();
+    </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  phone     String?
+  tags      String     @default("[]") // JSON array of tags
+  createdAt DateTime   @default(now())
+  logs      EventLog[]
+  emailLogs EmailLog[]
+}
+
+model EventLog {
+  id        String   @id @default(cuid())
+  eventName String
+  checkInAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+// 排程郵件任務
+model ScheduledEmail {
+  id          String    @id @default(cuid())
+  name        String    // 任務名稱
+  subject     String    // 郵件主旨
+  htmlContent String    // HTML 郵件內容
+  targetTags  String    @default("[]") // JSON array of target tags
+  scheduledAt DateTime  // 預定發送時間
+  sentAt      DateTime? // 實際發送時間
+  status      String    @default("pending") // pending, sent, failed, cancelled
+  sentCount   Int       @default(0)
+  failedCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// 郵件發送紀錄
+model EmailLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  emailType String
+  subject   String
+  status    String
+  error     String?
+  sentAt    DateTime @default(now())
+}
