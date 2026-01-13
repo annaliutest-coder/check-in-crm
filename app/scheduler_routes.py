@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -6,9 +7,22 @@ from pydantic import BaseModel
 
 from app.db import db
 from app.scheduler import schedule_email_task, cancel_email_task
-from app.gmail import get_admission_notice_template
+from app.email_templates import get_template, get_all_templates, TEMPLATES
 
 router = APIRouter(prefix="/scheduler", tags=["scheduler"])
+
+
+def parse_tags(tags_str: str) -> list[str]:
+    """Parse JSON tags string to list."""
+    try:
+        return json.loads(tags_str) if tags_str else []
+    except:
+        return []
+
+
+def serialize_tags(tags: list[str]) -> str:
+    """Serialize tags list to JSON string."""
+    return json.dumps(tags, ensure_ascii=False)
 
 
 class CreateScheduledEmailRequest(BaseModel):
@@ -27,63 +41,75 @@ class UpdateScheduledEmailRequest(BaseModel):
     scheduled_at: Optional[datetime] = None
 
 
-class ScheduledEmailResponse(BaseModel):
-    id: str
-    name: str
-    subject: str
-    target_tags: list[str]
-    scheduled_at: datetime
-    status: str
-    sent_count: int
-    failed_count: int
-
-
 @router.get("/emails")
 async def list_scheduled_emails():
     """List all scheduled emails."""
-    emails = await db.scheduledemail.find_many(
-        order={"scheduledAt": "desc"}
-    )
-    return emails
+    emails = await db.scheduledemail.find_many(order={"scheduledAt": "desc"})
+
+    # Parse tags for response
+    result = []
+    for email in emails:
+        result.append({
+            "id": email.id,
+            "name": email.name,
+            "subject": email.subject,
+            "targetTags": parse_tags(email.targetTags),
+            "scheduledAt": email.scheduledAt,
+            "sentAt": email.sentAt,
+            "status": email.status,
+            "sentCount": email.sentCount,
+            "failedCount": email.failedCount,
+            "createdAt": email.createdAt
+        })
+
+    return result
 
 
 @router.get("/emails/{email_id}")
 async def get_scheduled_email(email_id: str):
     """Get a specific scheduled email."""
-    email = await db.scheduledemail.find_unique(
-        where={"id": email_id}
-    )
+    email = await db.scheduledemail.find_unique(where={"id": email_id})
     if not email:
         raise HTTPException(status_code=404, detail="Scheduled email not found")
-    return email
+
+    return {
+        "id": email.id,
+        "name": email.name,
+        "subject": email.subject,
+        "htmlContent": email.htmlContent,
+        "targetTags": parse_tags(email.targetTags),
+        "scheduledAt": email.scheduledAt,
+        "status": email.status
+    }
 
 
 @router.post("/emails")
 async def create_scheduled_email(request: CreateScheduledEmailRequest):
     """Create a new scheduled email."""
-    # Validate scheduled time is in the future
     if request.scheduled_at <= datetime.now():
-        raise HTTPException(
-            status_code=400,
-            detail="Scheduled time must be in the future"
-        )
+        raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
 
-    # Create in database
     email = await db.scheduledemail.create(
         data={
             "name": request.name,
             "subject": request.subject,
             "htmlContent": request.html_content,
-            "targetTags": request.target_tags,
+            "targetTags": serialize_tags(request.target_tags),
             "scheduledAt": request.scheduled_at,
             "status": "pending"
         }
     )
 
-    # Schedule the task
     schedule_email_task(email.id, request.scheduled_at)
 
-    return email
+    return {
+        "id": email.id,
+        "name": email.name,
+        "subject": email.subject,
+        "targetTags": request.target_tags,
+        "scheduledAt": email.scheduledAt,
+        "status": email.status
+    }
 
 
 @router.put("/emails/{email_id}")
@@ -94,10 +120,7 @@ async def update_scheduled_email(email_id: str, request: UpdateScheduledEmailReq
         raise HTTPException(status_code=404, detail="Scheduled email not found")
 
     if existing.status != "pending":
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot update an email that has already been sent or cancelled"
-        )
+        raise HTTPException(status_code=400, detail="Cannot update a processed email")
 
     update_data = {}
     if request.name is not None:
@@ -107,25 +130,18 @@ async def update_scheduled_email(email_id: str, request: UpdateScheduledEmailReq
     if request.html_content is not None:
         update_data["htmlContent"] = request.html_content
     if request.target_tags is not None:
-        update_data["targetTags"] = request.target_tags
+        update_data["targetTags"] = serialize_tags(request.target_tags)
     if request.scheduled_at is not None:
         if request.scheduled_at <= datetime.now():
-            raise HTTPException(
-                status_code=400,
-                detail="Scheduled time must be in the future"
-            )
+            raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
         update_data["scheduledAt"] = request.scheduled_at
 
-    email = await db.scheduledemail.update(
-        where={"id": email_id},
-        data=update_data
-    )
+    email = await db.scheduledemail.update(where={"id": email_id}, data=update_data)
 
-    # Reschedule if time was updated
     if request.scheduled_at is not None:
         schedule_email_task(email.id, request.scheduled_at)
 
-    return email
+    return {"message": "Updated", "id": email.id}
 
 
 @router.delete("/emails/{email_id}")
@@ -136,51 +152,70 @@ async def cancel_scheduled_email(email_id: str):
         raise HTTPException(status_code=404, detail="Scheduled email not found")
 
     if existing.status != "pending":
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot cancel an email that has already been sent"
-        )
+        raise HTTPException(status_code=400, detail="Cannot cancel a processed email")
 
-    # Cancel the scheduled task
     cancel_email_task(email_id)
 
-    # Update status
-    email = await db.scheduledemail.update(
+    await db.scheduledemail.update(
         where={"id": email_id},
         data={"status": "cancelled"}
     )
 
-    return {"message": "Scheduled email cancelled", "email": email}
+    return {"message": "Cancelled"}
 
 
-@router.get("/templates/admission")
-async def get_admission_template():
-    """Get the admission notice email template."""
+# ===== Templates API =====
+
+@router.get("/templates")
+async def list_templates():
+    """List all available email templates."""
+    return get_all_templates()
+
+
+@router.get("/templates/{template_id}")
+async def get_template_by_id(template_id: str):
+    """Get a specific email template."""
+    template = get_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
     return {
-        "subject": "【招生通知】華語文教學系國際與文化組招生申請開放",
-        "html_content": get_admission_notice_template("{{name}}", "請參閱招生簡章")
+        "id": template_id,
+        "name": template["name"],
+        "subject": template["subject"],
+        "html_content": template["html"]
     }
 
+
+# ===== Recipients Preview =====
 
 @router.get("/preview-recipients")
 async def preview_recipients(tags: str = ""):
     """Preview users that would receive an email based on tags."""
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-    if tag_list:
-        users = await db.user.find_many(
-            where={"tags": {"has_every": tag_list}},
-            select={"id": True, "email": True, "name": True, "tags": True}
-        )
-    else:
-        users = await db.user.find_many(
-            select={"id": True, "email": True, "name": True, "tags": True}
-        )
+    users = await db.user.find_many()
 
-    return {
-        "count": len(users),
-        "users": users
-    }
+    if tag_list:
+        filtered = []
+        for user in users:
+            user_tags = parse_tags(user.tags)
+            if all(t in user_tags for t in tag_list):
+                filtered.append({
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "tags": user_tags
+                })
+        return {"count": len(filtered), "users": filtered}
+    else:
+        result = [{
+            "id": u.id,
+            "email": u.email,
+            "name": u.name,
+            "tags": parse_tags(u.tags)
+        } for u in users]
+        return {"count": len(result), "users": result}
 
 
 @router.get("/logs")

@@ -1,0 +1,38 @@
+# Render Blueprint - CRM 快速打卡系統
+# 文檔: https://render.com/docs/blueprint-spec
+
+services:
+  # Web Service - FastAPI 應用
+  - type: web
+    name: crm-checkin
+    runtime: python
+    region: singapore  # 亞洲區域
+    plan: free  # 可改為 starter 獲得更好性能
+    buildCommand: ./render-build.sh
+    startCommand: ./start.sh
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-db
+          property: connectionString
+      - key: EVENT_NAME
+        value: 2026春季招生活動
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      # Gmail API 設定（選填，需手動在 Dashboard 設定）
+      # - key: GMAIL_CLIENT_ID
+      #   sync: false
+      # - key: GMAIL_CLIENT_SECRET
+      #   sync: false
+      # - key: GMAIL_REFRESH_TOKEN
+      #   sync: false
+      # - key: GMAIL_USER
+      #   sync: false
+
+databases:
+  # PostgreSQL 資料庫
+  - name: crm-db
+    plan: free  # 免費方案 (90天後過期，可升級)
+    region: singapore
+    databaseName: crm_checkin
+    user: crm_user
