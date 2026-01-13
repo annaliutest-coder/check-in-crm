@@ -1,7 +1,6 @@
 import os
 import csv
 import io
-import json
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Query
@@ -19,19 +18,6 @@ def get_event_name() -> str:
     return os.getenv("EVENT_NAME", "2026春季招生活動")
 
 
-def parse_tags(tags_str: str) -> list[str]:
-    """Parse JSON tags string to list."""
-    try:
-        return json.loads(tags_str) if tags_str else []
-    except:
-        return []
-
-
-def serialize_tags(tags: list[str]) -> str:
-    """Serialize tags list to JSON string."""
-    return json.dumps(tags, ensure_ascii=False)
-
-
 @router.post("/check-in", response_model=CheckInResponse)
 async def check_in_user(
     request: CheckInRequest,
@@ -39,20 +25,26 @@ async def check_in_user(
 ):
     """
     Check in a user for the event.
+
+    - If user exists: Update tags and info
+    - If user doesn't exist: Create new user
+    - Create EventLog entry
+    - Optionally send welcome email
     """
+    # Check if user exists
     existing_user = await db.user.find_unique(where={"email": request.email})
 
     is_new_user = existing_user is None
     email_sent = False
-    event_name = get_event_name()
 
     if existing_user:
         # Update existing user
-        current_tags = parse_tags(existing_user.tags)
-        if event_name not in current_tags:
-            current_tags.append(event_name)
+        event_name = get_event_name()
+        new_tags = existing_user.tags.copy() if existing_user.tags else []
+        if event_name not in new_tags:
+            new_tags.append(event_name)
 
-        update_data = {"tags": serialize_tags(current_tags)}
+        update_data = {"tags": new_tags}
         if request.name:
             update_data["name"] = request.name
         if request.phone:
@@ -62,15 +54,16 @@ async def check_in_user(
             where={"id": existing_user.id},
             data=update_data
         )
-        message = "歡迎回來！已更新您的資料。"
+        message = f"歡迎回來！已更新您的資料。"
     else:
         # Create new user
+        event_name = get_event_name()
         user = await db.user.create(
             data={
                 "email": request.email,
                 "name": request.name,
                 "phone": request.phone,
-                "tags": serialize_tags([event_name])
+                "tags": [event_name]
             }
         )
         message = "打卡成功！歡迎加入！"
@@ -78,7 +71,7 @@ async def check_in_user(
     # Create EventLog
     await db.eventlog.create(
         data={
-            "eventName": event_name,
+            "eventName": get_event_name(),
             "userId": user.id
         }
     )
@@ -103,22 +96,7 @@ async def get_users():
         include={"logs": True},
         order={"createdAt": "desc"}
     )
-
-    # Parse tags for each user
-    result = []
-    for user in users:
-        user_dict = {
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-            "phone": user.phone,
-            "tags": parse_tags(user.tags),
-            "createdAt": user.createdAt,
-            "logs": user.logs
-        }
-        result.append(user_dict)
-
-    return result
+    return users
 
 
 @router.get("/event")
@@ -132,63 +110,70 @@ async def get_stats():
     """Get check-in statistics."""
     total_users = await db.user.count()
     total_checkins = await db.eventlog.count()
-    event_checkins = await db.eventlog.count(
-        where={"eventName": get_event_name()}
+    today_checkins = await db.eventlog.count(
+        where={
+            "eventName": get_event_name()
+        }
     )
 
     return {
         "total_users": total_users,
         "total_checkins": total_checkins,
-        "event_checkins": event_checkins
+        "event_checkins": today_checkins
     }
-
-
-@router.get("/tags")
-async def get_all_tags():
-    """Get all unique tags from users."""
-    users = await db.user.find_many()
-    all_tags = set()
-    for user in users:
-        tags = parse_tags(user.tags)
-        all_tags.update(tags)
-    return sorted(list(all_tags))
 
 
 @router.get("/export/csv")
 async def export_users_csv(
     tag: str = Query(default=None, description="篩選特定標籤的用戶")
 ):
-    """Export users to CSV file."""
-    users = await db.user.find_many(order={"createdAt": "desc"})
-
-    # Filter by tag if specified
+    """
+    Export users to CSV file.
+    Optionally filter by tag.
+    """
+    # Build query
     if tag:
-        users = [u for u in users if tag in parse_tags(u.tags)]
+        users = await db.user.find_many(
+            where={"tags": {"has": tag}},
+            order={"createdAt": "desc"}
+        )
+    else:
+        users = await db.user.find_many(
+            order={"createdAt": "desc"}
+        )
 
-    # Create CSV
+    # Create CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
+
+    # Write header
     writer.writerow(["Email", "姓名", "電話", "標籤", "建立時間"])
 
+    # Write data
     for user in users:
-        tags = parse_tags(user.tags)
         writer.writerow([
             user.email,
             user.name or "",
             user.phone or "",
-            ", ".join(tags),
+            ", ".join(user.tags) if user.tags else "",
             user.createdAt.strftime("%Y-%m-%d %H:%M:%S") if user.createdAt else ""
         ])
 
+    # Prepare response
     output.seek(0)
+
+    # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"users_export_{timestamp}.csv"
 
+    # Return as streaming response with BOM for Excel compatibility
     bom = '\ufeff'
     content = bom + output.getvalue()
 
     return StreamingResponse(
         iter([content]),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
     )

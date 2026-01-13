@@ -11,6 +11,7 @@
     </style>
 </head>
 <body class="bg-slate-900 min-h-screen">
+    <!-- Header -->
     <header class="bg-slate-800 border-b border-slate-700 py-4 px-6">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <h1 class="text-xl font-bold text-white">
@@ -30,15 +31,6 @@
             <h2 class="text-lg font-semibold text-white mb-4">建立排程郵件</h2>
 
             <form id="create-form" class="space-y-4">
-                <!-- Template Selection -->
-                <div>
-                    <label class="block text-slate-300 text-sm mb-1">選擇範本</label>
-                    <select id="template-select" onchange="loadSelectedTemplate()"
-                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none">
-                        <option value="">-- 選擇預設範本 --</option>
-                    </select>
-                </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-slate-300 text-sm mb-1">任務名稱</label>
@@ -60,21 +52,25 @@
                         placeholder="例：【招生通知】華語文教學系招生申請開放">
                 </div>
 
-                <!-- Target Tags Selection -->
                 <div>
-                    <label class="block text-slate-300 text-sm mb-1">發送對象（選擇標籤）</label>
-                    <select id="target_tag_select"
-                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none">
-                        <option value="">全部用戶</option>
-                    </select>
-                    <p class="text-slate-500 text-xs mt-1">選擇要發送的目標群組</p>
+                    <label class="block text-slate-300 text-sm mb-1">目標標籤（用逗號分隔）</label>
+                    <input type="text" id="target_tags"
+                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-indigo-500 focus:outline-none"
+                        placeholder="例：2026春季招生活動">
+                    <p class="text-slate-500 text-xs mt-1">留空將發送給所有用戶</p>
                 </div>
 
                 <div>
-                    <label class="block text-slate-300 text-sm mb-1">郵件內容 (HTML)</label>
-                    <p class="text-slate-500 text-xs mb-2">使用 <code class="bg-slate-700 px-1 rounded">{{name}}</code> 作為收件人姓名佔位符</p>
-                    <textarea id="html_content" rows="12" required
-                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:border-indigo-500 focus:outline-none"></textarea>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-slate-300 text-sm">郵件內容 (HTML)</label>
+                        <button type="button" onclick="loadTemplate()"
+                            class="text-indigo-400 text-sm hover:text-indigo-300">
+                            載入招生通知模板
+                        </button>
+                    </div>
+                    <textarea id="html_content" rows="10" required
+                        class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white font-mono text-sm focus:border-indigo-500 focus:outline-none"
+                        placeholder="輸入 HTML 內容...使用 {{name}} 作為收件人姓名佔位符"></textarea>
                 </div>
 
                 <div class="flex gap-4">
@@ -89,6 +85,7 @@
                 </div>
             </form>
 
+            <!-- Recipients Preview -->
             <div id="recipients-preview" class="hidden mt-4 p-4 bg-slate-900 rounded-lg">
                 <h3 class="text-white font-medium mb-2">收件人預覽</h3>
                 <p id="recipients-count" class="text-slate-400 text-sm"></p>
@@ -111,15 +108,16 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">名稱</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">主旨</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">對象</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">排程時間</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">狀態</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">結果</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">發送結果</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">操作</th>
                         </tr>
                     </thead>
                     <tbody id="emails-table" class="divide-y divide-slate-700">
-                        <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">載入中...</td></tr>
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-slate-500">載入中...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -137,11 +135,14 @@
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">時間</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">收件人</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">主旨</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">類型</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">狀態</th>
                         </tr>
                     </thead>
                     <tbody id="logs-table" class="divide-y divide-slate-700">
-                        <tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">載入中...</td></tr>
+                        <tr>
+                            <td colspan="5" class="px-4 py-8 text-center text-slate-500">載入中...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -149,53 +150,6 @@
     </main>
 
     <script>
-        let templates = [];
-        let availableTags = [];
-
-        // Load templates
-        async function loadTemplates() {
-            try {
-                const res = await fetch('/api/scheduler/templates');
-                templates = await res.json();
-
-                const select = document.getElementById('template-select');
-                select.innerHTML = '<option value="">-- 選擇預設範本 --</option>' +
-                    templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-            } catch (e) {
-                console.error('Failed to load templates:', e);
-            }
-        }
-
-        // Load selected template
-        async function loadSelectedTemplate() {
-            const templateId = document.getElementById('template-select').value;
-            if (!templateId) return;
-
-            try {
-                const res = await fetch(`/api/scheduler/templates/${templateId}`);
-                const template = await res.json();
-
-                document.getElementById('subject').value = template.subject;
-                document.getElementById('html_content').value = template.html_content;
-            } catch (e) {
-                alert('載入範本失敗');
-            }
-        }
-
-        // Load available tags
-        async function loadTags() {
-            try {
-                const res = await fetch('/api/tags');
-                availableTags = await res.json();
-
-                const select = document.getElementById('target_tag_select');
-                select.innerHTML = '<option value="">全部用戶</option>' +
-                    availableTags.map(tag => `<option value="${tag}">${tag}</option>`).join('');
-            } catch (e) {
-                console.error('Failed to load tags:', e);
-            }
-        }
-
         // Load scheduled emails
         async function loadScheduledEmails() {
             try {
@@ -205,40 +159,43 @@
                 const tbody = document.getElementById('emails-table');
 
                 if (emails.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">尚無排程郵件</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">尚無排程郵件</td></tr>';
                     return;
                 }
 
-                const statusColors = {
-                    'pending': 'bg-yellow-500/20 text-yellow-400',
-                    'sent': 'bg-emerald-500/20 text-emerald-400',
-                    'failed': 'bg-red-500/20 text-red-400',
-                    'cancelled': 'bg-slate-500/20 text-slate-400'
-                };
-                const statusText = {
-                    'pending': '等待中',
-                    'sent': '已發送',
-                    'failed': '失敗',
-                    'cancelled': '已取消'
-                };
+                tbody.innerHTML = emails.map(email => {
+                    const statusColors = {
+                        'pending': 'bg-yellow-500/20 text-yellow-400',
+                        'sent': 'bg-emerald-500/20 text-emerald-400',
+                        'failed': 'bg-red-500/20 text-red-400',
+                        'cancelled': 'bg-slate-500/20 text-slate-400'
+                    };
+                    const statusText = {
+                        'pending': '等待中',
+                        'sent': '已發送',
+                        'failed': '失敗',
+                        'cancelled': '已取消'
+                    };
 
-                tbody.innerHTML = emails.map(email => `
-                    <tr class="hover:bg-slate-700/50">
-                        <td class="px-4 py-3 text-white">${email.name}</td>
-                        <td class="px-4 py-3 text-slate-300 max-w-xs truncate">${email.subject}</td>
-                        <td class="px-4 py-3 text-slate-400 text-sm">${email.targetTags?.length ? email.targetTags.join(', ') : '全部'}</td>
-                        <td class="px-4 py-3 text-slate-400 text-sm">${new Date(email.scheduledAt).toLocaleString('zh-TW')}</td>
-                        <td class="px-4 py-3">
-                            <span class="px-2 py-1 rounded text-xs ${statusColors[email.status]}">${statusText[email.status]}</span>
-                        </td>
-                        <td class="px-4 py-3 text-sm">
-                            ${email.status === 'sent' ? `<span class="text-emerald-400">${email.sentCount}</span>/<span class="text-red-400">${email.failedCount}</span>` : '-'}
-                        </td>
-                        <td class="px-4 py-3">
-                            ${email.status === 'pending' ? `<button onclick="cancelEmail('${email.id}')" class="text-red-400 hover:text-red-300 text-sm">取消</button>` : ''}
-                        </td>
-                    </tr>
-                `).join('');
+                    return `
+                        <tr class="hover:bg-slate-700/50">
+                            <td class="px-4 py-3 text-white">${email.name}</td>
+                            <td class="px-4 py-3 text-slate-300 max-w-xs truncate">${email.subject}</td>
+                            <td class="px-4 py-3 text-slate-400 text-sm">${new Date(email.scheduledAt).toLocaleString('zh-TW')}</td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-1 rounded text-xs ${statusColors[email.status]}">${statusText[email.status]}</span>
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                ${email.status === 'sent' ? `<span class="text-emerald-400">${email.sentCount} 成功</span> / <span class="text-red-400">${email.failedCount} 失敗</span>` : '-'}
+                            </td>
+                            <td class="px-4 py-3">
+                                ${email.status === 'pending' ? `
+                                    <button onclick="cancelEmail('${email.id}')" class="text-red-400 hover:text-red-300 text-sm">取消</button>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
             } catch (e) {
                 console.error('Failed to load emails:', e);
             }
@@ -253,7 +210,7 @@
                 const tbody = document.getElementById('logs-table');
 
                 if (logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">尚無發送紀錄</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">尚無發送紀錄</td></tr>';
                     return;
                 }
 
@@ -262,6 +219,7 @@
                         <td class="px-4 py-3 text-slate-400 text-sm">${new Date(log.sentAt).toLocaleString('zh-TW')}</td>
                         <td class="px-4 py-3 text-white">${log.user?.email || '-'}</td>
                         <td class="px-4 py-3 text-slate-300 max-w-xs truncate">${log.subject}</td>
+                        <td class="px-4 py-3 text-slate-400 text-sm">${log.emailType}</td>
                         <td class="px-4 py-3">
                             <span class="px-2 py-1 rounded text-xs ${log.status === 'sent' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}">
                                 ${log.status === 'sent' ? '成功' : '失敗'}
@@ -274,17 +232,29 @@
             }
         }
 
+        // Load admission template
+        async function loadTemplate() {
+            try {
+                const res = await fetch('/api/scheduler/templates/admission');
+                const template = await res.json();
+                document.getElementById('subject').value = template.subject;
+                document.getElementById('html_content').value = template.html_content;
+            } catch (e) {
+                alert('載入模板失敗');
+            }
+        }
+
         // Preview recipients
         async function previewRecipients() {
-            const tag = document.getElementById('target_tag_select').value;
+            const tags = document.getElementById('target_tags').value;
             try {
-                const res = await fetch(`/api/scheduler/preview-recipients?tags=${encodeURIComponent(tag)}`);
+                const res = await fetch(`/api/scheduler/preview-recipients?tags=${encodeURIComponent(tags)}`);
                 const data = await res.json();
 
                 document.getElementById('recipients-preview').classList.remove('hidden');
                 document.getElementById('recipients-count').textContent = `共 ${data.count} 位收件人`;
                 document.getElementById('recipients-list').innerHTML = data.users.map(u =>
-                    `<div class="text-slate-400 text-sm py-1">${u.email} ${u.name ? `(${u.name})` : ''}</div>`
+                    `<div class="text-slate-400 text-sm">${u.email} ${u.name ? `(${u.name})` : ''}</div>`
                 ).join('');
             } catch (e) {
                 alert('預覽失敗');
@@ -295,13 +265,11 @@
         document.getElementById('create-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const tag = document.getElementById('target_tag_select').value;
-
             const data = {
                 name: document.getElementById('name').value,
                 subject: document.getElementById('subject').value,
                 html_content: document.getElementById('html_content').value,
-                target_tags: tag ? [tag] : [],
+                target_tags: document.getElementById('target_tags').value.split(',').map(t => t.trim()).filter(t => t),
                 scheduled_at: new Date(document.getElementById('scheduled_at').value).toISOString()
             };
 
@@ -344,8 +312,6 @@
         }
 
         // Initial load
-        loadTemplates();
-        loadTags();
         loadScheduledEmails();
         loadEmailLogs();
 

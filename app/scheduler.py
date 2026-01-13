@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -11,20 +10,18 @@ from app.gmail import send_email
 scheduler = AsyncIOScheduler(timezone="Asia/Taipei")
 
 
-def parse_tags(tags_str: str) -> list[str]:
-    """Parse JSON tags string to list."""
-    try:
-        return json.loads(tags_str) if tags_str else []
-    except:
-        return []
-
-
 async def execute_scheduled_email(scheduled_email_id: str):
-    """Execute a scheduled email task."""
+    """
+    Execute a scheduled email task.
+    Send emails to all users matching the target tags.
+    """
     print(f"[Scheduler] Executing scheduled email: {scheduled_email_id}")
 
     try:
-        task = await db.scheduledemail.find_unique(where={"id": scheduled_email_id})
+        # Get the scheduled email task
+        task = await db.scheduledemail.find_unique(
+            where={"id": scheduled_email_id}
+        )
 
         if not task:
             print(f"[Scheduler] Task not found: {scheduled_email_id}")
@@ -34,20 +31,12 @@ async def execute_scheduled_email(scheduled_email_id: str):
             print(f"[Scheduler] Task already processed: {task.status}")
             return
 
-        # Parse target tags
-        target_tags = parse_tags(task.targetTags)
-
-        # Find users - filter by tags if specified
-        users = await db.user.find_many()
-
-        if target_tags:
-            # Filter users who have ALL target tags
-            filtered_users = []
-            for user in users:
-                user_tags = parse_tags(user.tags)
-                if all(t in user_tags for t in target_tags):
-                    filtered_users.append(user)
-            users = filtered_users
+        # Find users with matching tags
+        users = await db.user.find_many(
+            where={
+                "tags": {"has_every": task.targetTags}
+            } if task.targetTags else {}
+        )
 
         print(f"[Scheduler] Found {len(users)} users to send email")
 
@@ -102,18 +91,25 @@ async def execute_scheduled_email(scheduled_email_id: str):
         print(f"[Scheduler] Error executing task: {e}")
         await db.scheduledemail.update(
             where={"id": scheduled_email_id},
-            data={"status": "failed", "failedCount": -1}
+            data={
+                "status": "failed",
+                "failedCount": -1  # Indicates system error
+            }
         )
 
 
 def schedule_email_task(task_id: str, scheduled_time: datetime):
-    """Add a new email task to the scheduler."""
+    """
+    Add a new email task to the scheduler.
+    """
     job_id = f"email_{task_id}"
 
+    # Remove existing job if any
     existing_job = scheduler.get_job(job_id)
     if existing_job:
         scheduler.remove_job(job_id)
 
+    # Schedule the new job
     scheduler.add_job(
         lambda: asyncio.create_task(execute_scheduled_email(task_id)),
         trigger=DateTrigger(run_date=scheduled_time),
@@ -126,7 +122,9 @@ def schedule_email_task(task_id: str, scheduled_time: datetime):
 
 
 def cancel_email_task(task_id: str):
-    """Cancel a scheduled email task."""
+    """
+    Cancel a scheduled email task.
+    """
     job_id = f"email_{task_id}"
     try:
         scheduler.remove_job(job_id)
@@ -138,7 +136,9 @@ def cancel_email_task(task_id: str):
 
 
 async def restore_pending_tasks():
-    """Restore pending scheduled tasks from database on startup."""
+    """
+    Restore pending scheduled tasks from database on startup.
+    """
     pending_tasks = await db.scheduledemail.find_many(
         where={
             "status": "pending",
